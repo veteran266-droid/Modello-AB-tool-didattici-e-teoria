@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Zoo Orbitale 3D – Modo Cimatico AB</title>
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:#070709;color:#e0e0e0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+#wrap{display:grid;grid-template-columns:320px 1fr;gap:10px;height:100vh;padding:10px}
+#panel{background:#101014;border:1px solid #262630;border-radius:10px;padding:10px;overflow-y:auto;font-size:12px}
+#panel h2{font-size:14px;margin:0 0 6px;color:#b8c8ff}
+#panel h3{font-size:11px;margin:10px 0 4px;color:#ff9f55;text-transform:uppercase;letter-spacing:.8px}
+.pgrid{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.pgrid button{background:#181820;color:#d0d0d0;border:1px solid #333;border-radius:6px;padding:4px 7px;cursor:pointer;font-size:11px;font-family:inherit}
+.pgrid button:hover{border-color:#666;background:#222230}
+.pgrid button.on{border-color:#ff9f55;color:#ff9f55;background:#1e1810}
+.ctrl{display:grid;grid-template-columns:110px 1fr;align-items:center;gap:6px;margin:5px 0}
+.ctrl label{color:#aab}
+input[type=range]{width:100%}
+select{background:#14141a;color:#d0d0d0;border:1px solid #333;border-radius:6px;padding:4px 6px;font-size:11px;width:100%}
+#view{background:#050508;border:1px solid #262630;border-radius:10px;overflow:hidden;position:relative}
+#view canvas{display:block;width:100%;height:100%}
+#badge{position:absolute;left:8px;bottom:8px;font-size:10px;color:#99a;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.08);font-family:monospace;white-space:pre-wrap;max-width:400px}
+#info{margin-top:8px;font-size:10.5px;color:#889;line-height:1.4;border-top:1px solid #262630;padding-top:8px;white-space:pre-wrap}
+.warn{color:#ff9f55}.ok{color:#7fdf7f}
+</style>
+</head>
+<body>
+<div id="wrap">
+<div id="panel">
+<h2>Zoo Orbitale 3D – Cimatica su S³</h2>
+<div class="pgrid" id="presets"></div>
+
+<h3>Controlli</h3>
+<div class="ctrl"><label>Soglia kA₀</label><input id="thr" type="range" min="0" max="0.5" step="0.005" value="0.06"><span id="thrv"></span></div>
+<div class="ctrl"><label>Scala punto</label><input id="ps" type="range" min="0.3" max="3" step="0.1" value="1.1"><span id="psv"></span></div>
+<div class="ctrl"><label>Risoluzione</label><input id="res" type="range" min="25" max="90" step="5" value="50"><span id="resv"></span></div>
+<div class="ctrl"><label>Colore</label>
+<select id="mode"><option value="phase">Fase Möbius (± UP/DOWN)</option><option value="density">Spessore pelle</option></select></div>
+<div class="ctrl"><label>Extra range</label><input id="extra" type="range" min="0.8" max="2.5" step="0.05" value="1.0"><span id="extrav"></span></div>
+
+<div id="info">Seleziona un orbitale dallo zoo.</div>
+</div>
+
+<div id="view">
+<canvas id="cv"></canvas>
+<div id="badge"></div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(()=>{
+'use strict';
+const TAU=Math.PI*2,PI=Math.PI;
+
+/* ===== MATEMATICA ===== */
+const FC=[1];function fact(n){n|=0;if(n<0)return NaN;for(let i=FC.length;i<=n;i++)FC[i]=FC[i-1]*i;return FC[n]}
+function clamp(x,a,b){return x<a?a:x>b?b:x}
+
+function laguerre(k,a,x){
+  k|=0;if(k===0)return 1;if(k===1)return 1+a-x;
+  let L2=1,L1=1+a-x;
+  for(let n=2;n<=k;n++){const L=((2*n-1+a-x)*L1-(n-1+a)*L2)/n;L2=L1;L1=L}
+  return L1;
+}
+
+function legendreP(l,m,x){
+  l|=0;m|=0;const mm=Math.abs(m);if(mm>l)return 0;
+  let pm=1;if(mm>0){let s2=Math.sqrt(Math.max(0,(1-x)*(1+x))),f=1;for(let i=1;i<=mm;i++){pm*=-f*s2;f+=2}}
+  if(l===mm)return pm;
+  let p1=x*(2*mm+1)*pm;if(l===mm+1)return p1;
+  let pl=0;for(let ll=mm+2;ll<=l;ll++){pl=((2*ll-1)*x*p1-(ll+mm-1)*pm)/(ll-mm);pm=p1;p1=pl}
+  return p1;
+}
+
+function Yr(l,m,th,ph){
+  const mm=Math.abs(m),x=Math.cos(th),P=legendreP(l,mm,x);
+  const N=Math.sqrt((2*l+1)/(4*PI)*fact(l-mm)/fact(l+mm));
+  if(m===0)return N*P;
+  const k=Math.SQRT2*N*P;
+  return m>0?k*Math.cos(mm*ph):k*Math.sin(mm*ph);
+}
+
+function Rnl(n,l,r){
+  n|=0;l|=0;if(n<1||l<0||l>=n)return 0;
+  const rho=2*r/n,kl=n-l-1,al=2*l+1;
+  return Math.exp(-rho/2)*Math.pow(rho,l)*laguerre(kl,al,rho);
+}
+
+function psi(n,l,m,x,y,z){
+  const r=Math.sqrt(x*x+y*y+z*z);
+  if(r<1e-12)return l===0?Rnl(n,l,0)*Yr(l,m,0,0):0;
+  return Rnl(n,l,r)*Yr(l,m,Math.acos(clamp(z/r,-1,1)),Math.atan2(y,x));
+}
+
+/* ===== PRESET ZOO ===== */
+const ORBITALS=[
+  {name:'Shell K',items:[]},
+  {name:'1s',n:1,l:0,m:0,r:6},
+  {name:'Shell L',items:[]},
+  {name:'2s',n:2,l:0,m:0,r:16},
+  {name:'2p_z',n:2,l:1,m:0,r:16},
+  {name:'2p_x',n:2,l:1,m:1,r:16},
+  {name:'2p_y',n:2,l:1,m:-1,r:16},
+  {name:'Shell M',items:[]},
+  {name:'3s',n:3,l:0,m:0,r:30},
+  {name:'3p_z',n:3,l:1,m:0,r:30},
+  {name:'3p_x',n:3,l:1,m:1,r:30},
+  {name:'3p_y',n:3,l:1,m:-1,r:30},
+  {name:'3d_z²',n:3,l:2,m:0,r:30,info:'2 nodi conici. Toro equatoriale + lobi polari. Zero nodi piani.'},
+  {name:'3d_xz',n:3,l:2,m:1,r:30,info:'1 nodo piano (xz). 4 lobi tra gli assi. Fase m=+1.'},
+  {name:'3d_yz',n:3,l:2,m:-1,r:30,info:'1 nodo piano (yz). 4 lobi tra gli assi. Fase m=−1 (foglio B).'},
+  {name:'3d_x²−y²',n:3,l:2,m:2,r:30,info:'2 nodi piani (a 45°). 4 lobi SUGLI assi x/y.'},
+  {name:'3d_xy',n:3,l:2,m:-2,r:30,info:'2 nodi piani (x,y). 4 lobi TRA gli assi x/y.'},
+  {name:'Shell N (f)',items:[]},
+  {name:'4s',n:4,l:0,m:0,r:50},
+  {name:'4p_z',n:4,l:1,m:0,r:50},
+  {name:'4d_z²',n:4,l:2,m:0,r:50,info:'d_z² con nodo radiale extra (shell n=4).'},
+  {name:'4d_x²−y²',n:4,l:2,m:2,r:50},
+  {name:'4d_xy',n:4,l:2,m:-2,r:50},
+  {name:'4f_z³',n:4,l:3,m:0,r:50,info:'3 nodi conici. Lobo polare + 2 anelli equatoriali. m=0, simmetria assiale pura.'},
+  {name:'4f_xz²',n:4,l:3,m:1,r:50,info:'2 nodi conici + 1 piano. 6 lobi asimmetrici. Fase UP.'},
+  {name:'4f_yz²',n:4,l:3,m:-1,r:50,info:'2 nodi conici + 1 piano. 6 lobi asimmetrici. Fase DOWN (foglio B).'},
+  {name:'4f_xyz',n:4,l:3,m:2,r:50,info:'3 nodi piani (xy,yz,xz). 8 lobi. Il più complesso dei f a m=±2.'},
+  {name:'4f_x(x²−3y²)',n:4,l:3,m:3,r:50,info:'3 nodi piani. 6 lobi nei settori alternati. Fase m=+3, chiraltà massima.'},
+  {name:'4f_y(3x²−y²)',n:4,l:3,m:-3,r:50,info:'3 nodi piani. 6 lobi settori opposti al precedente. Fase m=−3, foglio B inverso.'},
+  {name:'Shell O (g)',items:[]},
+  {name:'5g_z²',n:5,l:4,m:0,r:72,info:'g orbitale. 3 nodi conici. Struttura complessa a 3 gusci radiali.'},
+  {name:'5g_xz²',n:5,l:4,m:1,r:72},
+  {name:'5g_xy²',n:5,l:4,m:2,r:72},
+  {name:'5g_xyz',n:5,l:4,m:3,r:72},
+  {name:'5g_x⁴',n:5,l:4,m:4,r:72},
+  {name:'5g_xy(x²−y²)',n:5,l:4,m:-4,r:72},
+];
+
+/* ===== UI ===== */
+const $=id=>document.getElementById(id);
+const presDiv=$('presets'), infoDiv=$('info');
+let activeBtn=null;
+
+ORBITALS.forEach(o=>{
+  if(o.items&&o.items.length===0){
+    const h=document.createElement('div');h.className='pgrid';h.style.width='100%';
+    const s=document.createElement('span');s.textContent=o.name;s.style.cssText='color:#889;font-size:10px;margin:4px 0;display:block';
+    presDiv.appendChild(s);
+    // separator
+    const sep=document.createElement('div');sep.style.cssText='width:100%;height:1px;background:#262630;margin:2px 0';
+    presDiv.appendChild(sep);
+    o.items={_sep:true};
+  } else if(!o.items){
+    const b=document.createElement('button');
+    b.textContent=o.name;
+    b.dataset.idx=ORBITALS.indexOf(o);
+    b.addEventListener('click',()=>selectOrbital(o,b));
+    presDiv.appendChild(b);
+  }
+});
+
+function selectOrbital(o,btn){
+  if(activeBtn)activeBtn.classList.remove('on');
+  btn.classList.add('on');activeBtn=btn;
+  // update sliders
+  $('extra').value=1.0;$('extrav').textContent='1.00';
+  buildOrbital(o);
+}
+
+function buildOrbital(o){
+  const n=o.n,l=o.l,m=o.m;
+  const res=+$('res').value|0;
+  const thr=+$('thr').value;
+  const ps=+$('ps').value;
+  const extra=+$('extra').value;
+  const mode=$('mode').value;
+  const rmax=o.r*extra;
+
+  // stima max densità (pre-scan deterministico)
+  let maxD=0;
+  const nSamples=2000;
+  for(let i=0;i<nSamples;i++){
+    const u=Math.random(),v=Math.random(),w=Math.random();
+    const theta=Math.acos(2*u-1),phi=v*TAU,r=w*rmax;
+    const x=r*Math.sin(theta)*Math.cos(phi),y=r*Math.sin(theta)*Math.sin(phi),z=r*Math.cos(theta);
+    const p=psi(n,l,m,x,y,z),d=p*p;if(d>maxD)maxD=d;
+  }
+  maxD=maxD||1e-20;
+  const cut=thr*maxD;
+
+  // griglia sferica deterministica
+  const lRes=Math.max(20,res+l*12);  // più risoluzione per l alto
+  const pRes=lRes*2;
+  const rRes=res;
+  const pos=[],col=[];
+
+  for(let ri=0;ri<=rRes;ri++){
+    const r=(ri/rRes)*rmax;
+    const sinTh=Math.sin((ri/rRes)*PI);
+    for(let ti=0;ti<lRes;ti++){
+      const theta=(ti/(lRes-1))*PI;
+      const st=Math.sin(theta),ct=Math.cos(theta);
+      for(let pi=0;pi<pRes;pi++){
+        const phi=(pi/pRes)*TAU;
+        const x=r*st*Math.cos(phi),y=r*st*Math.sin(phi),z=r*ct;
+        const p=psi(n,l,m,x,y,z);
+        const d=p*p;
+        if(d<cut)continue;
+        pos.push(x,y,z);
+        const t=Math.sqrt(Math.min(1,d/maxD));
+        if(mode==='phase'){
+          if(p>=0)col.push(1.0,0.45+t*0.45,0.08);
+          else col.push(0.08,0.45+t*0.45,1.0);
+        }else{
+          const b=0.15+t*0.85;
+          col.push(b*0.7,b*0.8,b*1.1);
+        }
+      }
+    }
+  }
+
+  // statistiche cimatiche AB
+  const totalGrid=rRes*lRes*pRes;
+  const accepted=pos.length/3;
+  const cavities=totalGrid-accepted;
+  const nodoCone=l;      // nodi conici = l
+  const nodoPiano=Math.abs(m); // nodi piani = |m|
+  const nodiRadiali=n-l-1;
+  const shellLabel='KLMNO'[n-1]||'?';
+
+  infoDiv.innerHTML=
+    `<b>${o.name}</b>  (n=${n}, l=${l}, m=${m})  shell ${shellLabel}\n`+
+    `griglia scansionata: ${totalGrid.toLocaleString()} nodi\n`+
+    `pelle dura (B-node): ${accepted.toLocaleString()} (${(100*accepted/totalGrid).toFixed(1)}%)\n`+
+    `cavità (nodi di Chladni): ${cavities.toLocaleString()} (${(100*cavities/totalGrid).toFixed(1)}%)\n\n`+
+    `<span class="warn">Struttura cimatica AB:</span>\n`+
+    `  nodi radiali (gusci Laguerre): ${nodiRadiali}\n`+
+    `  nodi conici (θ, parità l): ${nodoCone}\n`+
+    `  nodi piani (φ, |m|): ${nodoPiano}\n`+
+    (o.info?`  <span class="ok">${o.info}</span>\n`:'')+
+    (Math.abs(m)>0?
+      `<span class="warn">chiralità: m=${m>0?'+':''}${m} → ${m>0?'faccia A (UP)':'faccia B (DOWN)'} del nastro di Möbius. Due fogli separati nella visualizzazione fase.</span>`:
+      `<span class="ok">m=0: simmetria assiale pura. Nessun foglio separato — singolo strato.</span>`);
+
+  // three.js
+  renderPoints(pos,col,ps,rmax);
+  $('badge').textContent=`${o.name}  |  ${accepted.toLocaleString()} punti pelle  |  ${cavities.toLocaleString()} cavità  |  griglia ${totalGrid.toLocaleString()}`;
+}
+
+/* ===== THREE.JS ===== */
+const canvas=$('cv');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x050508);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,5000);
+camera.position.set(25,18,30);
+const controls=new THREE.OrbitControls(camera,canvas);
+controls.enableDamping=true;controls.dampingFactor=0.08;
+
+// helper
+const gridH=new THREE.GridHelper(60,12,0x1a1a28,0x0e0e18);
+gridH.material.opacity=0.5;gridH.material.transparent=true;scene.add(gridH);
+const axesH=new THREE.AxesHelper(20);axesH.material.opacity=0.4;axesH.material.transparent=true;scene.add(axesH);
+
+// luce per eventuale futuro mesh
+scene.add(new THREE.AmbientLight(0xffffff,0.3));
+
+let ptsObj=null;
+
+function renderPoints(positions,colors,ps,rmax){
+  if(ptsObj){scene.remove(ptsObj);ptsObj.geometry.dispose();ptsObj.material.dispose();ptsObj=null}
+  if(!positions.length)return;
+  const geom=new THREE.BufferGeometry();
+  geom.setAttribute('position',new THREE.BufferAttribute(new Float32Array(positions),3));
+  geom.setAttribute('color',new THREE.BufferAttribute(new Float32Array(colors),3));
+  geom.computeBoundingSphere();
+  const mat=new THREE.PointsMaterial({size:ps,sizeAttenuation:true,vertexColors:true,transparent:true,opacity:0.88,depthWrite:false});
+  ptsObj=new THREE.Points(geom,mat);
+  scene.add(ptsObj);
+  // adatta camera
+  const dist=rmax*1.8;
+  camera.position.set(dist*0.7,dist*0.5,dist*0.8);
+  controls.target.set(0,0,0);
+  // adatta griglia
+  scene.remove(gridH);scene.remove(axesH);
+  const gSize=Math.ceil(rmax*2/12)*12;
+  gridH=new THREE.GridHelper(gSize,Math.max(4,gSize/6),0x1a1a28,0x0e0e18);
+  gridH.material.opacity=0.4;gridH.material.transparent=true;scene.add(gridH);
+  const aSize=Math.min(rmax*0.7,40);
+  axesH=new THREE.AxesHelper(aSize);axesH.material.opacity=0.35;axesH.material.transparent=true;scene.add(axesH);
+}
+
+/* ===== LOOP ===== */
+function resize(){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  if(canvas.width!==w*renderer.getPixelRatio()||canvas.height!==h*renderer.getPixelRatio()){
+    renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+  }
+}
+function loop(){resize();controls.update();renderer.render(scene,camera);requestAnimationFrame(loop)}
+
+/* ===== WIRING ===== */
+function syncSlider(id,vId){
+  const s=$(id),v=$(vId);
+  s.addEventListener('input',()=>{v.textContent=s.value;rebuild()});
+}
+syncSlider('thr','thrv');
+syncSlider('ps','psv');
+syncSlider('res','resv');
+syncSlider('extra','extrav');
+ $('mode').addEventListener('change',rebuild);
+
+function rebuild(){
+  if(!activeBtn)return;
+  const idx=+activeBtn.dataset.idx;
+  buildOrbital(ORBITALS[idx]);
+}
+
+loop();
+
+// selezione iniziale: 3d_x²-y² per mostrare i d orbitali
+setTimeout(()=>{
+  const btns=presDiv.querySelectorAll('button[data-idx]');
+  const target=Array.from(btns).find(b=>ORBITALS[+b.dataset.idx].name==='3d_x²−y²');
+  if(target)selectOrbital(ORBITALS[+target.dataset.idx],target);
+},100);
+
+})();
+</script>
+</body>
+</html>

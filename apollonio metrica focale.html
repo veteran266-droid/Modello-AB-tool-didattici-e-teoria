@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Conica Lab — Grammatica p/q e Spazio Multifocale</title>
+<style>
+  :root{--bg:#0e1116;--panel:#0f141b;--ink:#dbe6ff;--muted:#9fb0c8;--accent:#72b7ff}
+  *{box-sizing:border-box;font-family:system-ui,Segoe UI,Roboto,Arial}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ink)}
+  .wrap{display:grid;grid-template-columns:320px 1fr;height:100%}
+  aside{background:var(--panel);padding:14px 12px 18px 14px;overflow:auto;border-right:1px solid #1b2230}
+  h1{font-size:16px;margin:0 0 8px 0}
+  h2{font-size:13px;margin:14px 0 6px 0;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .row{display:flex;align-items:center;gap:10px;margin:6px 0}
+  .row label{flex:1 1 auto;font-size:13px;color:var(--muted)}
+  .row input[type=range]{flex:0 0 150px}
+  .row input[type=checkbox]{margin-right:6px}
+  .badge{display:inline-block;background:#192233;color:#8fb6ff;border:1px solid #20324e;
+         font-size:11px;padding:2px 6px;border-radius:6px;margin-left:6px}
+  #readout{font:12px/1.35 ui-monospace,Consolas,Monaco,monospace;color:#a9c6ff;margin-top:8px;white-space:pre-wrap}
+  canvas{width:100%;height:100%;display:block;background:conic-gradient(from 0deg at 50% 50%, #0e1116, #0c1015 60%, #0e1116)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <h1>Conica Lab <span id="badge" class="badge">—</span></h1>
+
+    <h2>Parametri Locali</h2>
+    <div class="row"><label>Eccentricità e</label><input id="e" type="range" min="0" max="5" step="0.001" value="1.5"></div>
+    <div class="row"><label>Semilato retto p</label><input id="p" type="range" min="0" max="240" step="1" value="60"></div>
+    <div class="row"><label>Rotazione φ (°)</label><input id="phi" type="range" min="0" max="360" step="1" value="0"></div>
+
+    <h2>Spazio e Chiusura</h2>
+    <div class="row"><input id="doInversion" type="checkbox"><label for="doInversion" style="color:#ffacd6">Spazio Proiettivo (1/r)</label></div>
+    <div class="row"><input id="complexClosure" type="checkbox" checked><label for="complexClosure" style="color:#ffacd6">Chiusura Complessa</label></div>
+    <div class="row"><label>Limite Sistema L_max</label><input id="Lmax" type="range" min="50" max="400" step="1" value="200"></div>
+    <div class="row"><input id="autoScale" type="checkbox" checked>
+      <label for="autoScale" style="flex:none">Auto scala</label>
+      <input id="zoom" type="range" min="0.4" max="2.2" step="0.01" value="1.00">
+    </div>
+
+    <h2>Grammatica Razionale (p/q)</h2>
+    <div class="row"><label style="flex:1">Numeratore p</label><input id="pRatio" type="range" min="0" max="4" step="1" value="1"></div>
+    <div class="row"><label style="flex:1">Denominatore q</label><input id="qRatio" type="range" min="1" max="4" step="1" value="1"></div>
+    
+    <h2>Mezza Torsione all'Infinito</h2>
+    <div class="row"><label>Fase all'Infinito (0=Euclideo, 90=Chiuso)</label><input id="phaseInf" type="range" min="0" max="180" step="1" value="0"></div>
+    
+    <h2>Fase Base</h2>
+    <div class="row"><label style="flex:1">Fase ϕ₀ (Multiplo di π/2)</label><input id="phase0" type="range" min="0" max="3" step="1" value="0"></div>
+
+    <h2>Coppie Focali e Flip Metrico</h2>
+    <div class="row"><label>Coppie Focali (N)</label><input id="focalPairs" type="range" min="1" max="4" step="1" value="2"></div>
+    <div class="row"><input id="showCones" type="checkbox" checked><label for="showCones" style="color:#ffacd6">Isolinee Flip (Rosso/Giallo)</label></div>
+    <div class="row"><input id="showLemniscate" type="checkbox" checked><label for="showLemniscate" style="color:#7fdf7f">Frontiere k=1</label></div>
+    <div class="row"><input id="showMobiusNode" type="checkbox" checked><label for="showMobiusNode" style="color:#fff">Nodo Möbius (0,0)</label></div>
+
+    <h2>Evoluzione Temporale</h2>
+    <div class="row"><label>θ(t) (°)</label><input id="theta" type="range" min="0" max="1440" step="1" value="0"></div>
+    <div class="row"><input id="anim" type="checkbox" checked><label for="anim" style="flex:none">Anima</label>
+         <input id="speed" type="range" min="10" max="180" step="1" value="40"></div>
+    <div class="row"><input id="showTrail" type="checkbox" checked><label for="showTrail" style="color:#7fdf7f">Traccia</label></div>
+
+    <h2>Visualizza</h2>
+    <div class="row"><input id="showCurve" type="checkbox" checked><label for="showCurve">Curva (Grammatica p/q)</label></div>
+    <div class="row"><input id="showFoci" type="checkbox" checked><label for="showFoci" style="color:#ff9f55">Fuochi</label></div>
+  </aside>
+
+  <canvas id="cv"></canvas>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const TAU = 2*Math.PI;
+const get = id => document.getElementById(id);
+const cv = get('cv');
+const ctx = cv.getContext('2d');
+
+function resize(){ cv.width = cv.clientWidth | 0; cv.height = cv.clientHeight | 0; draw(0); }
+window.addEventListener('resize', resize);
+
+function rot2D([x,y], a){ const c=Math.cos(a), s=Math.sin(a); return [x*c - y*s, x*s + y*c]; }
+function toCanvas([x,y], cx, cy, S){ return [cx + x*S, cy - y*S]; }
+
+function applyCompactInversion([x,y]){
+  const r2 = x*x + y*y; 
+  if(r2 > 1e20) return [0, 0]; 
+  if(r2 < 1e-12) return [0, 0]; 
+  const xp = x / r2, yp = y / r2; const rp2 = xp*xp + yp*yp; const denom = 1 + rp2;
+  return [xp / denom, yp / denom]; 
+}
+
+function drawBoundary(cx, cy, S, doInversion, Lmax){
+  ctx.lineWidth = 1;
+  if(doInversion){
+    ctx.strokeStyle = 'rgba(255, 160, 255, 0.25)';
+    ctx.beginPath(); ctx.arc(cx, cy, 1*S, 0, TAU); ctx.stroke();
+  } else {
+    ctx.strokeStyle = 'rgba(255, 160, 255, 0.15)'; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.arc(cx, cy, Lmax*S, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+function drawFoci(e, p, phi, cx, cy, S, doInversion, focalPairs){
+  if(e === 0) return;
+  const c_val = Math.abs(p * e / (1 - e*e));
+  for(let i=0; i<focalPairs; i++){
+    const angle = i * Math.PI / focalPairs;
+    const F1 = [c_val * Math.cos(angle), c_val * Math.sin(angle)];
+    const F2 = [-c_val * Math.cos(angle), -c_val * Math.sin(angle)];
+    const drawPoint = (pt, label, color) => {
+      if(!pt) return; 
+      let pt_final = doInversion ? applyCompactInversion(pt) : pt;
+      const pt_rot = rot2D(pt_final, phi); const P_cv = toCanvas(pt_rot, cx, cy, S);
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(P_cv[0], P_cv[1], 4, 0, TAU); ctx.fill();
+      ctx.font = '10px system-ui'; ctx.fillText(label, P_cv[0]+6, P_cv[1]-6);
+    };
+    drawPoint(F1, '0', 'rgba(255, 200, 100, 0.9)');
+    drawPoint(F2, '-1', 'rgba(255, 150, 100, 0.9)');
+  }
+}
+
+function drawApollonianFlipIsolines(e, p, phi, cx, cy, S, doInversion, focalPairs){
+  if(e === 0 || e === 1) return;
+  const c = Math.abs(p * e / (1 - e*e));
+  const numCircles = 14;
+  const steps = 360;
+
+  const colorA = 'rgba(255, 100, 80, 0.25)'; // Rosso 
+  const colorB = 'rgba(255, 220, 80, 0.25)'; // Giallo 
+
+  for(let n=0; n<focalPairs; n++){
+    const axisAngle = n * Math.PI / focalPairs + phi;
+    
+    for(let i=1; i<=numCircles; i++){
+      const k_base = i / (numCircles + 1);
+      const k_vals = [k_base, 1 / k_base]; 
+
+      k_vals.forEach((k, idx) => {
+        const center_X = c * (1 + k*k) / (1 - k*k);
+        const R = (2 * c * k) / Math.abs(1 - k*k);
+        
+        const color = (i % 2 === 0) ? colorA : colorB;
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        let pen = false;
+
+        for(let j=0; j<=steps; j++){
+          let t_angle = TAU * (j/steps);
+          let x = center_X + R * Math.cos(t_angle);
+          let y = R * Math.sin(t_angle);
+          
+          let pt_global = rot2D([x,y], axisAngle);
+          let pt = doInversion ? applyCompactInversion(pt_global) : pt_global;
+          const P = toCanvas(pt, cx, cy, S);
+
+          if(doInversion && Math.hypot(x,y) > 1e5) { pen = false; continue; }
+          if (!pen){ ctx.moveTo(P[0], P[1]); pen = true; } else ctx.lineTo(P[0], P[1]);
+        }
+        ctx.stroke();
+      });
+    }
+  }
+}
+
+function drawLemniscates(e, p, phi, cx, cy, S, doInversion, focalPairs){
+  if(e === 0 || e === 1) return;
+  const c = Math.abs(p * e / (1 - e*e));
+  const a = c * Math.sqrt(2);
+  
+  ctx.strokeStyle = 'rgba(127, 223, 127, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  
+  for(let n=0; n<focalPairs; n++){
+    const axisAngle = n * Math.PI / focalPairs + phi;
+    ctx.beginPath();
+    let pen = false;
+    for(let i=0; i<=360; i++){
+      let t = TAU * (i/360);
+      const denom = 1 + Math.sin(t)*Math.sin(t);
+      let x = a * Math.cos(t) / denom;
+      let y = a * Math.sin(t) * Math.cos(t) / denom;
+      let pt_global = rot2D([x,y], axisAngle);
+      let pt = doInversion ? applyCompactInversion(pt_global) : pt_global;
+      const P = toCanvas(pt, cx, cy, S);
+      if (!pen){ ctx.moveTo(P[0], P[1]); pen = true; } else ctx.lineTo(P[0], P[1]);
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+
+function drawMobiusNode(cx, cy, S, doInversion){
+  if(!doInversion) return;
+  const O = toCanvas([0,0], cx, cy, S);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.beginPath(); ctx.arc(O[0], O[1], 4, 0, TAU); ctx.fill();
+  ctx.font = '11px system-ui'; ctx.fillText('Nodo Möbius', O[0]+8, O[1]+14);
+}
+
+function fitScale(e, p, W, H, doInversion, Lmax){
+  if (doInversion) { 
+    let rMaxInv = 1.2 / Math.max(p, 1); 
+    return (Math.min(W, H) * 0.38) / (rMaxInv * 1.10); 
+  }
+  let rMax = (e < 1) ? p / (1 - e) : (Math.abs(e-1)<1e-3 ? Lmax : p / (e - 1));
+  rMax = Math.max(rMax, Lmax); return (Math.min(W, H) * 0.38) / (rMax * 1.10); 
+}
+
+// LA CURVA USA LA SUA GRAMMATICA p/q (nReal)
+function drawContinuousCurve(e, p, phi, nReal, phiShiftBase, phaseInfinity, S, cx, cy, color, doInversion, complexClosure, Lmax, qRatio){
+  if (p === 0 || nReal === 0) return; 
+  
+  const K = 4000 * Math.max(1, qRatio);
+  const thMax = TAU * Math.max(1, qRatio);
+  
+  ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.beginPath();
+  let pen = false;
+  
+  for (let i=0; i<=K; i++){
+    let th = thMax * (i/K);
+    const den = 1 + e * Math.cos(nReal * th + phiShiftBase);
+    
+    if (Math.abs(den) < 1e-5){
+      if(complexClosure && doInversion){
+        const O = toCanvas(rot2D([0,0], phi), cx, cy, S);
+        if (!pen){ ctx.moveTo(O[0], O[1]); pen = true; } else ctx.lineTo(O[0], O[1]);
+      } else { pen = false; }
+      continue;
+    }
+
+    let r = p / den; 
+    let pt_angle = th;
+    
+    // Mezza Torsione gestita qui
+    if (r < 0) {
+      r = -r; 
+      pt_angle = th + Math.PI + (phaseInfinity * Math.PI / 180.0); 
+    }
+
+    let xl = r * Math.cos(pt_angle), yl = r * Math.sin(pt_angle);
+    let pt = doInversion ? applyCompactInversion([xl, yl]) : [xl, yl];
+    
+    if(!doInversion && r > Lmax){ pen = false; continue; }
+
+    let pt_rot = rot2D(pt, phi); 
+    const P = toCanvas(pt_rot, cx, cy, S);
+    if (!pen){ ctx.moveTo(P[0], P[1]); pen = true; } else ctx.lineTo(P[0], P[1]);
+  }
+  if (pen) ctx.stroke();
+}
+
+let trail = []; const TRAIL_LEN = 600;
+function drawMovingPoint(e, p, phi, nReal, phiShiftBase, phaseInfinity, S, theta, cx, cy, doInversion, Lmax){
+  const den = 1 + e * Math.cos(nReal * theta + phiShiftBase);
+  const safe = Math.abs(den) > 1e-4; 
+  let r = safe ? p/den : 0;
+  let inBounds = safe && (doInversion || Math.abs(r) <= Lmax);
+  let PA = null;
+  if(inBounds){
+    let pt_angle = theta;
+    if (r < 0) { r = -r; pt_angle = theta + Math.PI + (phaseInfinity * Math.PI / 180.0); }
+    let xl = r*Math.cos(pt_angle), yl = r*Math.sin(pt_angle);
+    let pt = doInversion ? applyCompactInversion([xl, yl]) : [xl, yl];
+    let pt_rot = rot2D(pt, phi); 
+    PA = toCanvas(pt_rot, cx, cy, S);
+    if(showTrail && PA) { trail.push(PA); if(trail.length > TRAIL_LEN) trail.shift(); }
+    else { trail.push(null); if(trail.length > TRAIL_LEN) trail.shift(); }
+  } else { trail.push(null); if(trail.length > TRAIL_LEN) trail.shift(); }
+  if(showTrail && trail.length > 1){
+    for(let i=1; i<trail.length; i++){
+      if(!trail[i] || !trail[i-1]) continue;
+      const alpha = i / trail.length;
+      ctx.strokeStyle = `hsla(150, 100%, 60%, ${alpha * 0.8})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(trail[i-1][0], trail[i-1][1]); ctx.lineTo(trail[i][0], trail[i][1]); ctx.stroke();
+    }
+  }
+  if(PA){
+    ctx.fillStyle='#00ff88'; ctx.beginPath(); ctx.arc(PA[0],PA[1],5,0,TAU); ctx.fill();
+    ctx.fillStyle='rgba(0,255,136,0.3)'; ctx.beginPath(); ctx.arc(PA[0],PA[1],10,0,TAU); ctx.fill();
+  }
+}
+
+function num(id, d=0){ const el=get(id); return el ? +el.value || d : d; }
+function chk(id,d=false){ const el=get(id); return el ? !!el.checked : d; }
+
+let thetaAnim = 0;
+
+function draw(dt){
+  const W=cv.width, H=cv.height; const cx = W*0.5, cy = H*0.50; ctx.clearRect(0,0,W,H);
+  const e=num('e'), p=num('p'), phi=num('phi')*Math.PI/180, auto=chk('autoScale',true), zoom=num('zoom',1);
+  const doInversion=chk('doInversion'), complexClosure=chk('complexClosure'), Lmax = num('Lmax');
+  const pR = num('pRatio');  const qR = num('qRatio');  const nReal = pR / qR;
+  const phase0Idx = num('phase0'); const phiShiftBase = phase0Idx * (Math.PI / 2); 
+  const phaseInfinity = num('phaseInf'); 
+  const focalPairs = num('focalPairs', 2);
+  
+  const S = auto ? fitScale(e, p, W, H, doInversion, Lmax) * zoom : num('scale');
+  const showCurve=chk('showCurve',true), showFoci=chk('showFoci',true), showTrail=chk('showTrail',true);
+  const showCones=chk('showCones'), showLemniscate=chk('showLemniscate'), showMobiusNode=chk('showMobiusNode');
+
+  let cls = `p/q=${pR}/${qR}`;
+  get('badge').textContent = cls;
+
+  drawBoundary(cx, cy, S, doInversion, Lmax);
+  
+  if(showCones) drawApollonianFlipIsolines(e, p, phi, cx, cy, S, doInversion, focalPairs);
+  if(showLemniscate) drawLemniscates(e, p, phi, cx, cy, S, doInversion, focalPairs);
+  if(showMobiusNode) drawMobiusNode(cx, cy, S, doInversion);
+
+  if(showFoci) drawFoci(e, p, phi, cx, cy, S, doInversion, focalPairs);
+
+  if(showCurve){
+    const col = doInversion ? 'rgba(0, 255, 136, 0.9)' : 'rgba(0, 255, 136, 0.6)';
+    drawContinuousCurve(e, p, phi, nReal, phiShiftBase, phaseInfinity, S, cx, cy, col, doInversion, complexClosure, Lmax, qR);
+  }
+
+  const maxAnimAngle = qR <= 0 ? 360 : qR * 360;
+  const theta = (chk('anim')? thetaAnim : num('theta') % maxAnimAngle) * Math.PI/180;
+  drawMovingPoint(e, p, phi, nReal, phiShiftBase, phaseInfinity, S, theta, cx, cy, doInversion, Lmax);
+
+  let info = `GRAMMATICA RAZIONALE\n`;
+  info += `Frequenza n = ${nReal.toFixed(3)}\n`;
+  info += `La curva usa p/q per muoversi\n`;
+  info += `nello spazio multifocale.\n`;
+  info += `Rosso/Giallo = Flip metrico.\n`;
+  get('readout').textContent = info;
+}
+
+let last=performance.now();
+function tick(t){
+  const dt=(t-last)/1000; last=t;
+  if(chk('anim')){
+    const sp = num('speed'); thetaAnim += sp*dt;
+    const qR = num('qRatio');
+    const maxAngle = qR <= 0 ? 360 : qR * 360;
+    while(thetaAnim > maxAngle) thetaAnim -= maxAngle;
+    get('theta').value = (thetaAnim % 1440)|0;
+  }
+  draw(dt); requestAnimationFrame(tick);
+}
+
+let dragging=false, startX=0, startVal=0;
+cv.addEventListener('mousedown', e=>{ dragging=true; startX=e.clientX; startVal=num('phi'); });
+window.addEventListener('mousemove', e=>{ if(!dragging) return; const dx = e.clientX - startX; let v = (startVal + dx*0.25); v = (v%360+360)%360; get('phi').value = v; draw(0); });
+window.addEventListener('mouseup', ()=> dragging=false);
+
+['e','p','phi','showCurve','showFoci','showTrail','autoScale','zoom','Lmax','pRatio','qRatio','phase0','phaseInf', 'showCones', 'showLemniscate', 'showMobiusNode', 'focalPairs', 'doInversion', 'complexClosure'].forEach(id => get(id)?.addEventListener('input', ()=>{ trail=[]; draw(0); }));
+
+resize(); requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AB • Chiusura razionale XAB + Campionamento Angolare Teodorius v1_2</title>
+<style>
+  body { margin: 0; overflow: hidden; font-family: monospace; background-color: #010105; color: #eef; }
+  #controls { position: fixed; bottom: 20px; left: 20px; right: 20px; background: rgba(6,6,14,0.94); backdrop-filter: blur(16px); border-radius: 28px; border: 1px solid rgba(255,180,80,0.5); padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; z-index: 30; font-size: 11px; pointer-events: auto; max-height: 45vh; overflow:auto; }
+  .ctrl-group { display: flex; flex-direction: column; gap: 4px; background: rgba(0,0,0,0.55); padding: 6px 12px; border-radius: 20px; min-width: 100px; }
+  .ctrl-group label { font-size: 9px; color: #9ab; }
+  input, select { background: #111218; border: 1px solid #334155; border-radius: 40px; padding: 4px 8px; color: white; font-size: 10px; width: 100%; }
+  button { color:white; border-radius:22px; padding:6px 12px; cursor:pointer; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  #info-panel { position: fixed; top: 20px; right: 20px; background: rgba(6,6,14,0.88); backdrop-filter: blur(12px); border-radius: 20px; padding: 12px 18px; font-size: 11px; max-width: 360px; pointer-events: none; z-index: 30; }
+  .stat-row { display: flex; justify-content: space-between; gap:18px; margin: 4px 0; }
+  .badge { color: #ffaa66; }
+  .ok { color: #88ff88; }
+  .warn { color: #ff7777; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="info-panel">
+  <div><strong>🌀 XAB • TRASPORTI ANNIDATI + CAMPIONAMENTO θ TEODORIUS</strong></div>
+  <div class="stat-row"><span>K = calendario globale</span><span id="kValue" class="badge">—</span></div>
+  <div class="stat-row"><span>periodi S/T/M/R</span><span id="periods" class="badge">—</span></div>
+  <div class="stat-row"><span>nR/qR</span><span id="nrqr" class="badge">—</span></div>
+  <div class="stat-row"><span>periodo radiale</span><span id="radPeriod" class="badge">—</span></div>
+  <div class="stat-row"><span>mod3 portante</span><span id="mod3Val" class="badge">—</span></div>
+  <div class="stat-row"><span>μ3 S/T/M/R</span><span id="mu3Val" class="badge">—</span></div>
+  <div class="stat-row"><span>Camp. θ ℓ₀ / Δθ</span><span id="teoVal" class="badge">—</span></div>
+  <div class="stat-row"><span>punti effettivi</span><span id="sampleVal" class="badge">—</span></div>
+  <div class="stat-row"><span>chiusura</span><span id="closureVal" class="badge">—</span></div>
+  <div class="stat-row"><span>stato</span><span id="closureState" class="badge">—</span></div>
+</div>
+
+<div id="controls">
+  <div class="ctrl-group"><label>nS / qS</label><div class="row"><input id="nS" type="number" min="1" step="1" value="1"><span>/</span><input id="qS" type="number" min="1" step="1" value="2"></div></div>
+  <div class="ctrl-group"><label>nT / qT</label><div class="row"><input id="nT" type="number" min="1" step="1" value="1"><span>/</span><input id="qT" type="number" min="1" step="1" value="3"></div></div>
+  <div class="ctrl-group"><label>nM / qM</label><div class="row"><input id="nM" type="number" min="1" step="1" value="1"><span>/</span><input id="qM" type="number" min="1" step="1" value="4"></div></div>
+  <div class="ctrl-group"><label>nR / qR (radiale)</label><div class="row"><input id="nR" type="number" min="1" step="1" value="1"><span>/</span><input id="qR" type="number" min="1" step="1" value="1"></div></div>
+  <div class="ctrl-group"><label>tilt S/T/M °</label><div class="row"><input id="tiltS" type="range" min="-180" max="180" value="60" style="width:60px"><span id="tiltSv">60</span><input id="tiltT" type="range" min="-180" max="180" value="60" style="width:60px"><span id="tiltTv">60</span><input id="tiltM" type="range" min="-180" max="180" value="60" style="width:60px"><span id="tiltMv">60</span></div></div>
+  <div class="ctrl-group"><label>R0</label><input id="R0" type="range" min="0.5" max="2.5" step="0.05" value="1.5"><span id="R0v">1.50</span></div>
+  <div class="ctrl-group"><label>α (metrica radiale)</label><input id="alpha" type="range" min="0" max="4" step="0.1" value="1.5"><span id="alphav">1.5</span></div>
+  <div class="ctrl-group"><label>campionamento θ</label><select id="sampleMode"><option value="fixed">fisso classico</option><option value="teodorius" selected>Teodorius adattivo</option></select></div>
+  <div class="ctrl-group"><label>modN campionamento</label><input id="modN" type="range" min="12" max="384" step="6" value="96"><span id="modNv">96</span></div>
+  <div class="ctrl-group"><label>snap portante</label><select id="snapMode"><option value="3">mod3 portante</option><option value="6" selected>mod6 + antipodo</option><option value="12">mod12 mezzerie</option><option value="24">mod24 μ fine</option><option value="N">modN shell</option></select></div>
+  <div class="ctrl-group"><label>densità θ ×</label><input id="sampleMul" type="range" min="0.25" max="6" step="0.25" value="1.5"><span id="sampleMulv">1.50</span></div>
+  <div class="ctrl-group"><label>raffina su shell</label><input id="shellRefine" type="range" min="0" max="4" step="0.1" value="1.0"><span id="shellRefinev">1.0</span></div>
+  <div class="ctrl-group"><label>risoluzione fissa</label><input id="baseRes" type="range" min="500" max="12000" step="100" value="2000"><span id="baseResv">2000</span></div>
+  <div class="ctrl-group"><label>max punti θ</label><input id="maxSamples" type="range" min="1000" max="80000" step="1000" value="45000"><span id="maxSamplesv">45000</span></div>
+  <button id="reset" style="background:#ffaa6622;border:1px solid #ffaa66;">⟳ RESET</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+'use strict';
+
+const DEG = Math.PI / 180;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x010105);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(5, 4, 7);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+const root = new THREE.Group();
+scene.add(root);
+
+let currentLine = null;
+
+const getNum = id => parseFloat(document.getElementById(id).value);
+const qnum = v => Math.max(1, Math.trunc(Number.isFinite(v) ? v : 1));
+
+const gcd = (a, b) => {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b !== 0) { const t = b; b = a % b; a = t; }
+  return a || 1;
+};
+const lcm = (a, b) => Math.abs(a * b) / gcd(a, b);
+const multiLcm = arr => arr.reduce((a, b) => lcm(a, b), 1);
+const periodOf = (n, q) => q / gcd(n, q);
+
+function safeNormalize(v) {
+  const len = v.length();
+  return len < 1e-9 ? new THREE.Vector3(1, 0, 0) : v.clone().multiplyScalar(1 / len);
+}
+
+function rotateAround(v, axis, ang) {
+  const k = safeNormalize(axis);
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const dot = k.dot(v);
+  const cross = new THREE.Vector3().crossVectors(k, v);
+  return v.clone().multiplyScalar(c)
+    .add(cross.multiplyScalar(s))
+    .add(k.clone().multiplyScalar(dot * (1 - c)));
+}
+
+function childPlane(parentU, parentN, tiltDeg, spinAngleDeg) {
+  const tilt = tiltDeg * DEG;
+  const spin = spinAngleDeg * DEG;
+  const u0 = safeNormalize(parentU);
+  const n0 = safeNormalize(rotateAround(parentN, u0, tilt));
+  const v0 = safeNormalize(new THREE.Vector3().crossVectors(n0, u0));
+  return {
+    u: rotateAround(u0, n0, spin),
+    v: rotateAround(v0, n0, spin),
+    n: n0.clone()
+  };
+}
+
+function radiusInPlane(plane, phaseDeg) {
+  const a = phaseDeg * DEG;
+  return plane.u.clone().multiplyScalar(Math.cos(a))
+    .add(plane.v.clone().multiplyScalar(Math.sin(a)));
+}
+
+function metricScale(rAbs, R0, alpha) {
+  const s = rAbs / Math.max(R0, 1e-9);
+  const clamped = Math.max(0, Math.min(1, s));
+  return 1 + alpha * (1 - clamped);
+}
+
+function nearestMultipleDistance(x, m) {
+  const q = x / Math.max(1, m);
+  return Math.abs(q - Math.round(q)) * Math.max(1, m);
+}
+
+function teodoriusShellPulse(nT, modN) {
+  const mods = [3, 6, 12, 24, modN].filter((v, i, a) => v > 0 && a.indexOf(v) === i);
+  let b = 0, wsum = 0;
+  for (let i = 0; i < mods.length; i++) {
+    const m = mods[i];
+    const d = nearestMultipleDistance(nT, m);
+    const w = 1 / (i + 1);
+    b += w * Math.exp(-0.5 * (d / 0.72) * (d / 0.72));
+    wsum += w;
+  }
+  return wsum ? b / wsum : 0;
+}
+
+// Teodorius qui NON è metrica radiale.
+// È campionamento angolare: dato r, dice quanti punti servono
+// perché l'arco discreto resti lungo circa ℓ0 nello shell corrente.
+function snapToCarrier(n, snapMode, modN) {
+  const base = snapMode === 'N' ? Math.max(3, modN) : Math.max(3, qnum(parseFloat(snapMode)));
+  return base * Math.ceil(Math.max(1, n) / base);
+}
+
+function teodoriusAngularSampling(rAbs, R0, modN, snapMode, sampleMul, shellRefine) {
+  const ell0 = Math.max(1e-6, R0 * 2 * Math.PI / Math.max(3, modN));
+  const rSafe = Math.max(rAbs, ell0);
+  const dThetaRaw = Math.atan2(ell0, rSafe);
+  const nThetaRaw = Math.max(3, Math.ceil((2 * Math.PI) / Math.max(1e-9, dThetaRaw)));
+  const nThetaSnap = snapToCarrier(nThetaRaw, snapMode, modN);
+
+  const nT = (rAbs / ell0) * (rAbs / ell0);
+  const shell = teodoriusShellPulse(nT, modN);
+
+  // Più densità e più shellRefine = passo angolare più piccolo,
+  // ma solo per campionare: NON modifica r, non modifica la metrica.
+  const density = Math.max(0.25, sampleMul) * (1 + Math.max(0, shellRefine) * shell);
+  const nThetaEff = Math.max(3, Math.ceil(nThetaSnap * density));
+  const dThetaEff = (2 * Math.PI) / nThetaEff;
+
+  return { ell0, dThetaRaw, dThetaEff, nThetaRaw, nThetaSnap, nThetaEff, nT, shell };
+}
+
+function clamp(x, a, b) {
+  return Math.max(a, Math.min(b, x));
+}
+
+function turnsInK(n, q, K) {
+  return Math.round(K * n / Math.max(1, q));
+}
+
+function portanteMu3(n, q, K) {
+  // mod3 = portante. Ogni giro portato dalla triade pesa 3 unità μ geometriche.
+  return 3 * turnsInK(n, q, K);
+}
+
+function parityLabel(v) {
+  return (v % 2 === 0) ? 'pari✓' : 'dispari↺';
+}
+
+// Onda triangolare: u è già il calendario globale in [0,K].
+// FIX: non dividere per K. Così ogni sottociclo conta davvero dentro K.
+function radialTriangular(u, nR, qR, R0) {
+  const ratio = nR / qR;
+  const phase = 2 * ratio * u;
+  const t = ((phase % 2) + 2) % 2;
+  if (t < 1) return R0 * (1 - 2 * t);
+  return -R0 * (1 - 2 * (t - 1));
+}
+
+function disposeCurrentLine() {
+  if (!currentLine) return;
+  root.remove(currentLine);
+  currentLine.geometry.dispose();
+  currentLine.material.dispose();
+  currentLine = null;
+}
+
+function syncReadouts() {
+  ['tiltS','tiltT','tiltM'].forEach(id => {
+    document.getElementById(id + 'v').textContent = document.getElementById(id).value;
+  });
+  document.getElementById('R0v').textContent = getNum('R0').toFixed(2);
+  document.getElementById('alphav').textContent = getNum('alpha').toFixed(1);
+  document.getElementById('modNv').textContent = String(qnum(getNum('modN')));
+  document.getElementById('sampleMulv').textContent = getNum('sampleMul').toFixed(2);
+  document.getElementById('shellRefinev').textContent = getNum('shellRefine').toFixed(1);
+  document.getElementById('baseResv').textContent = String(qnum(getNum('baseRes')));
+  document.getElementById('maxSamplesv').textContent = String(qnum(getNum('maxSamples')));
+}
+
+function rebuild() {
+  disposeCurrentLine();
+  syncReadouts();
+
+  const nS = qnum(getNum('nS')), qS = qnum(getNum('qS'));
+  const nT = qnum(getNum('nT')), qT = qnum(getNum('qT'));
+  const nM = qnum(getNum('nM')), qM = qnum(getNum('qM'));
+  const nR = qnum(getNum('nR')), qR = qnum(getNum('qR'));
+
+  const tiltS = getNum('tiltS'), tiltT = getNum('tiltT'), tiltM = getNum('tiltM');
+  const R0 = getNum('R0');
+  const alpha = getNum('alpha');
+  const sampleMode = document.getElementById('sampleMode').value;
+  const modN = qnum(getNum('modN'));
+  const snapMode = document.getElementById('snapMode').value;
+  const sampleMul = getNum('sampleMul');
+  const shellRefine = getNum('shellRefine');
+  const baseRes = qnum(getNum('baseRes'));
+  const maxSamples = qnum(getNum('maxSamples'));
+
+  const pS = periodOf(nS, qS);
+  const pT = periodOf(nT, qT);
+  const pM = periodOf(nM, qM);
+  const pR = periodOf(nR, qR);
+
+  const K = multiLcm([pS, pT, pM, pR]);
+
+  const points = [];
+  const globalU = new THREE.Vector3(1, 0, 0);
+  const globalN = new THREE.Vector3(0, 1, 0);
+
+  const ratios = [nS/qS, nT/qT, nM/qM, nR/qR].map(x => Math.max(1e-9, Math.abs(x)));
+  const maxRatio = Math.max(...ratios);
+
+  let sampleStats = {
+    count: 0, minDu: Infinity, maxDu: 0,
+    minN: Infinity, maxN: 0, minD: Infinity, maxD: 0,
+    sumN: 0, lastTheta: null, ell0: 0
+  };
+
+  function pointAtU(u) {
+    const rRaw = radialTriangular(u, nR, qR, R0);
+    const absR = Math.abs(rRaw);
+
+    // Metrica radiale: SOLO α classico. Teodorius non entra qui.
+    const metric = metricScale(absR, R0, alpha);
+    const rScaled = rRaw * metric;
+
+    const spinPhaseS = 360 * (nS / qS) * u;
+    const spinPhaseT = 360 * (nT / qT) * u;
+    const spinPhaseM = 360 * (nM / qM) * u;
+    const spinPhaseR = 360 * (nR / qR) * u;
+
+    const planeS = childPlane(globalU, globalN, tiltS, spinPhaseS);
+    const rSVec = radiusInPlane(planeS, spinPhaseS);
+
+    const planeT = childPlane(rSVec, planeS.n, tiltT, spinPhaseT);
+    const rTVec = radiusInPlane(planeT, spinPhaseT);
+
+    const planeM = childPlane(rTVec, planeT.n, tiltM, spinPhaseM);
+    const rMVec = radiusInPlane(planeM, spinPhaseM);
+
+    const planeR = childPlane(rMVec, planeM.n, 0, spinPhaseR);
+    const rRVec = radiusInPlane(planeR, spinPhaseR);
+
+    const samp = teodoriusAngularSampling(absR, R0, modN, snapMode, sampleMul, shellRefine);
+    return { point: rRVec.clone().multiplyScalar(rScaled), samp, absR };
+  }
+
+  function pushSample(u) {
+    const out = pointAtU(u);
+    points.push(out.point);
+    sampleStats.count++;
+    sampleStats.minN = Math.min(sampleStats.minN, out.samp.nThetaEff);
+    sampleStats.maxN = Math.max(sampleStats.maxN, out.samp.nThetaEff);
+    sampleStats.sumN += out.samp.nThetaEff;
+    sampleStats.minD = Math.min(sampleStats.minD, out.samp.dThetaEff);
+    sampleStats.maxD = Math.max(sampleStats.maxD, out.samp.dThetaEff);
+    sampleStats.lastTheta = out.samp;
+    sampleStats.ell0 = out.samp.ell0;
+    return out;
+  }
+
+  if (sampleMode === 'fixed') {
+    const fixedRes = Math.min(maxSamples, Math.max(800, Math.round(baseRes * (0.8 + R0 * 0.5))));
+    for (let i = 0; i <= fixedRes; i++) {
+      const u = (i / fixedRes) * K;
+      pushSample(u);
+      if (i > 0) {
+        const du = K / fixedRes;
+        sampleStats.minDu = Math.min(sampleStats.minDu, du);
+        sampleStats.maxDu = Math.max(sampleStats.maxDu, du);
+      }
+    }
+  } else {
+    let u = 0;
+    let guard = 0;
+    while (u < K && guard < maxSamples) {
+      const out = pushSample(u);
+      const localDuRaw = out.samp.dThetaEff / (2 * Math.PI * maxRatio);
+      const minDu = K / Math.max(1000, maxSamples);
+      const maxDu = K / 24; // evita salti enormi se r è piccolo
+      const du = clamp(localDuRaw, minDu, maxDu);
+      sampleStats.minDu = Math.min(sampleStats.minDu, du);
+      sampleStats.maxDu = Math.max(sampleStats.maxDu, du);
+      u += du;
+      guard++;
+    }
+    if (points.length === 0 || points[points.length - 1].distanceTo(pointAtU(K).point) > 1e-12) {
+      pushSample(K);
+    }
+  }
+
+  const positions = [];
+  for (const p of points) positions.push(p.x, p.y, p.z);
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geom.computeBoundingSphere();
+
+  const mat = new THREE.LineBasicMaterial({ color: 0xffaa66 });
+  currentLine = new THREE.Line(geom, mat);
+  root.add(currentLine);
+
+  const closure = points.length > 1 ? points[0].distanceTo(points[points.length - 1]) : 999;
+  const closed = closure < 0.05;
+
+  const muS = portanteMu3(nS, qS, K);
+  const muT = portanteMu3(nT, qT, K);
+  const muM = portanteMu3(nM, qM, K);
+  const muR = portanteMu3(nR, qR, K);
+  const tMid = teodoriusAngularSampling(R0, R0, modN, snapMode, sampleMul, shellRefine);
+  const avgN = sampleStats.count ? sampleStats.sumN / sampleStats.count : 0;
+
+  document.getElementById('kValue').textContent = String(K);
+  document.getElementById('periods').textContent = `${pS}/${pT}/${pM}/${pR}`;
+  document.getElementById('nrqr').textContent = `${nR}/${qR} = ${(nR / qR).toFixed(3)}`;
+  document.getElementById('radPeriod').textContent = String(pR);
+  document.getElementById('mod3Val').textContent = `3→6→12→24→${modN}`;
+  document.getElementById('mu3Val').textContent = `${muS}${parityLabel(muS).slice(0,1)}/${muT}${parityLabel(muT).slice(0,1)}/${muM}${parityLabel(muM).slice(0,1)}/${muR}${parityLabel(muR).slice(0,1)}`;
+  document.getElementById('teoVal').textContent = `ℓ0=${tMid.ell0.toFixed(4)} ΔθR0=${(tMid.dThetaEff/DEG).toFixed(2)}° Nθ=${tMid.nThetaEff}`;
+  document.getElementById('sampleVal').textContent = `${points.length} pts  Nθ ${Math.round(sampleStats.minN)}–${Math.round(sampleStats.maxN)} avg ${avgN.toFixed(0)}`;
+  document.getElementById('closureVal').textContent = closure.toFixed(5);
+  const stateEl = document.getElementById('closureState');
+  stateEl.textContent = closed ? '✓ CHIUSA' : '✗ APERTA';
+  stateEl.className = closed ? 'ok' : 'warn';
+}
+
+const sphereOuter = new THREE.Mesh(
+  new THREE.SphereGeometry(1.5, 64, 40),
+  new THREE.MeshBasicMaterial({ color: 0x4f6ea6, wireframe: true, transparent: true, opacity: 0.08 })
+);
+root.add(sphereOuter);
+
+function updateSphere() {
+  const R0 = getNum('R0');
+  sphereOuter.scale.setScalar(R0 / 1.5);
+}
+
+const ids = ['nS','qS','nT','qT','nM','qM','nR','qR','tiltS','tiltT','tiltM','R0','alpha','sampleMode','modN','snapMode','sampleMul','shellRefine','baseRes','maxSamples'];
+ids.forEach(id => document.getElementById(id).addEventListener('input', () => {
+  updateSphere();
+  rebuild();
+}));
+
+document.getElementById('reset').addEventListener('click', () => {
+  document.getElementById('nS').value = 1; document.getElementById('qS').value = 2;
+  document.getElementById('nT').value = 1; document.getElementById('qT').value = 3;
+  document.getElementById('nM').value = 1; document.getElementById('qM').value = 4;
+  document.getElementById('nR').value = 1; document.getElementById('qR').value = 1;
+  document.getElementById('tiltS').value = 60; document.getElementById('tiltT').value = 60; document.getElementById('tiltM').value = 60;
+  document.getElementById('R0').value = 1.5;
+  document.getElementById('alpha').value = 1.5;
+  document.getElementById('sampleMode').value = 'teodorius';
+  document.getElementById('modN').value = 96;
+  document.getElementById('snapMode').value = '6';
+  document.getElementById('sampleMul').value = 1.5;
+  document.getElementById('shellRefine').value = 1.0;
+  document.getElementById('baseRes').value = 2000;
+  document.getElementById('maxSamples').value = 45000;
+  updateSphere();
+  rebuild();
+});
+
+function animate() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / Math.max(1, window.innerHeight);
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}, { passive: true });
+
+updateSphere();
+rebuild();
+animate();
+</script>
+<!-- AB_XAB_TEODORIUS_ANGULAR_SAMPLING_v1_2_END -->
+</body>
+</html>

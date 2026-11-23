@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>XAB • Cerchi A + traccia penna nel piano v0.7</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#05070b;--panel:#0f1520;--ink:#eaf1ff;--muted:#9badc6;--line:#26364d;
+  --cyan:#5fe7ff;--orange:#ffb13d;--pink:#ff79bd;--green:#90ffb2;--yellow:#f0e96a;
+  --red:#ff7070;--violet:#b999ff;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:13px/1.35 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{display:grid;grid-template-columns:520px 1fr;height:100vh;gap:10px;padding:10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:auto}
+.left{padding:12px}
+h1{font-size:15px;margin:0 0 8px;color:#dce9ff}
+h2{font-size:11px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.row{display:grid;grid-template-columns:205px 1fr 96px;gap:7px;align-items:center;margin:6px 0}
+.row label{color:#bac7dc}
+input[type=range]{width:100%}
+select,button{background:#121a27;color:var(--ink);border:1px solid #2d3d56;border-radius:8px;padding:5px 7px;font:inherit}
+button{cursor:pointer}
+button:hover{border-color:#6d86b8}
+.checkrow{display:flex;align-items:center;gap:8px;margin:6px 0;color:#bac7dc}
+.badge{display:inline-block;border:1px solid #2c405c;background:#111c2b;border-radius:999px;padding:2px 8px;color:#a9c9ff;font-size:11px}
+#view{position:relative;background:#05070b}
+canvas{display:block;width:100%;height:100%;background:radial-gradient(circle at 50% 50%,#0c121c,#05070b 70%)}
+#hud{position:absolute;left:10px;bottom:10px;max-width:1300px;background:rgba(0,0,0,.64);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;color:#adc0dc;font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
+.note{font-size:11.5px;color:#91a2bb;border-top:1px dashed #26364d;margin-top:10px;padding-top:10px}
+.formula{font:11.5px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;background:#0b111a;border:1px solid #202d40;border-radius:8px;padding:8px;color:#abc2e8}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.btns button{font-size:12px;padding:6px 8px}
+.read{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;color:#a9c9ff;background:#0b111a;border:1px solid #202d40;border-radius:8px;padding:7px;margin:8px 0}
+.small{font-size:11px;color:#8ea5c6}
+.sep{height:1px;background:#1d2a3d;margin:10px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="panel left">
+    <h1>XAB • Cerchi A + traccia della penna <span class="badge">v0.7</span></h1>
+
+    <h2>Vista geometria</h2>
+    <div class="row"><label>Zoom</label><input id="zoom" type="range" min="0.35" max="4.8" step="0.01" value="1.12"><span id="zoomv"></span></div>
+    <div class="row"><label>Offset X</label><input id="offX" type="range" min="-700" max="700" step="1" value="-55"><span id="offXv"></span></div>
+    <div class="row"><label>Offset Y</label><input id="offY" type="range" min="-450" max="450" step="1" value="0"><span id="offYv"></span></div>
+    <div class="checkrow"><input id="showGrid" type="checkbox" checked><label for="showGrid">griglia / asse operativo</label></div>
+
+    <h2>Nodo comune 0 / 2π / 4π</h2>
+    <div class="row"><label>E₀ X</label><input id="E0x" type="range" min="-160" max="160" step="1" value="0"><span id="E0xv"></span></div>
+    <div class="row"><label>E₀ Y</label><input id="E0y" type="range" min="-160" max="160" step="1" value="0"><span id="E0yv"></span></div>
+    <div class="row"><label>asse E₀→π</label><input id="axisDeg" type="range" min="-180" max="180" step="1" value="0"><span id="axisDegv"></span></div>
+
+    <h2>Limiti geometrici</h2>
+    <div class="row"><label>r max</label><input id="rMax" type="range" min="20" max="190" step="1" value="95"><span id="rMaxv"></span></div>
+    <div class="read" id="limitsRead"></div>
+
+    <h2>Fase globale e locale</h2>
+    <div class="row"><label>fase globale Γ</label><input id="globalPhase" type="range" min="0" max="50000" step="1" value="0"><span id="globalPhasev"></span></div>
+    <div class="row"><label>lettura locale</label>
+      <select id="localMode">
+        <option value="mod720" selected>locale = Γ mod 720</option>
+        <option value="mod360">locale = Γ mod 360</option>
+        <option value="raw">locale = Γ non ridotta</option>
+      </select>
+      <span id="localModev"></span>
+    </div>
+    <div class="row"><label>senso ciclo</label>
+      <select id="cycleSense">
+        <option value="-1" selected>destra→sinistra</option>
+        <option value="1">sinistra→destra</option>
+      </select>
+      <span id="cycleSensev"></span>
+    </div>
+    <div class="row"><label>offset stato</label><input id="cycleOffset" type="range" min="-180" max="180" step="1" value="45"><span id="cycleOffsetv"></span></div>
+
+    <div class="btns">
+      <button id="pBothRight">destra/destra</button>
+      <button id="pRightLeft">destra/sinistra</button>
+      <button id="pBothLeft">sinistra/sinistra</button>
+      <button id="pLeftRight">sinistra/destra</button>
+      <button id="pCollapseA1">collasso A₁</button>
+      <button id="pCollapseA2">collasso A₂</button>
+    </div>
+
+    <h2>Nodi π / 3π</h2>
+    <div class="row"><label>modo nodi</label>
+      <select id="controlMode">
+        <option value="cycle" selected>fase ciclica: dπ²+d3π²=dmax²</option>
+        <option value="direct">diretto: π e 3π liberi</option>
+      </select>
+      <span id="controlModev"></span>
+    </div>
+    <div class="row"><label>Pπ signed</label><input id="piSigned" type="range" min="-380" max="380" step="1" value="190"><span id="piSignedv"></span></div>
+    <div class="row"><label>P3π signed</label><input id="p3Signed" type="range" min="-380" max="380" step="1" value="190"><span id="p3Signedv"></span></div>
+
+    <h2>Traccia ρ diagnostica</h2>
+    <div class="row"><label>p ρ</label><input id="rhoP" type="range" min="1" max="36" step="1" value="5"><span id="rhoPv"></span></div>
+    <div class="row"><label>q ρ</label><input id="rhoQ" type="range" min="1" max="36" step="1" value="8"><span id="rhoQv"></span></div>
+    <div class="row"><label>scala ρ nel piano</label><input id="rhoPlaneScale" type="range" min="0.2" max="2.0" step="0.01" value="1.0"><span id="rhoPlaneScalev"></span></div>
+    <div class="checkrow"><input id="rhoDriven" type="checkbox"><label for="rhoDriven">usa p/q ρ per guidare i cerchi</label></div>
+    <div class="checkrow"><input id="showRhoInset" type="checkbox" checked><label for="showRhoInset">mostra inset piano ρ</label></div>
+    <div class="checkrow"><input id="showRhoPlaneDot" type="checkbox"><label for="showRhoPlaneDot">mostra dot ρ nel piano cerchi</label></div>
+    <div class="checkrow"><input id="showRhoPlaneTrail" type="checkbox"><label for="showRhoPlaneTrail">traccia ρ nel piano cerchi</label></div>
+
+    <h2>Mano spinoriale</h2>
+    <div class="row"><label>mano base A₁</label><select id="spin1"><option value="1" selected>mano +</option><option value="-1">mano −</option></select><span id="spin1v"></span></div>
+    <div class="row"><label>mano base A₂</label><select id="spin2"><option value="1">mano +</option><option value="-1" selected>mano −</option></select><span id="spin2v"></span></div>
+    <div class="checkrow"><input id="autoSpinFromSide" type="checkbox" checked><label for="autoSpinFromSide">inverti mano effettiva sul lato negativo</label></div>
+
+    <h2>Penna che scorre sulle circonferenze</h2>
+    <div class="checkrow"><input id="linkWriteToGlobal" type="checkbox" checked><label for="linkWriteToGlobal">lega θ scrittura a Γ</label></div>
+    <div class="row"><label>fase θ</label><input id="phase" type="range" min="0" max="720" step="1" value="720"><span id="phasev"></span></div>
+    <div class="checkrow"><input id="animate" type="checkbox"><label for="animate">anima fase globale</label></div>
+    <div class="row"><label>velocità °/s</label><input id="speed" type="range" min="5" max="360" step="1" value="45"><span id="speedv"></span></div>
+    <div class="checkrow"><input id="drawPartial" type="checkbox"><label for="drawPartial">mostra solo tratto scritto fino a θ</label></div>
+    <div class="checkrow"><input id="showPenDot" type="checkbox" checked><label for="showPenDot">mostra dot penna</label></div>
+    <div class="checkrow"><input id="showPenTrail" type="checkbox" checked><label for="showPenTrail">mostra traccia penna nel piano</label></div>
+    <div class="row"><label>persistenza traccia penna</label><input id="penTrailMax" type="range" min="200" max="12000" step="50" value="3200"><span id="penTrailMaxv"></span></div>
+    <div class="btns">
+      <button id="clearPenTrail">svuota traccia penna</button>
+      <button id="clearAllTrails">svuota tutte le tracce</button>
+    </div>
+
+    <h2>Mostra struttura</h2>
+    <div class="checkrow"><input id="showCircles" type="checkbox" checked><label for="showCircles">cerchi A derivati dai nodi</label></div>
+    <div class="checkrow"><input id="showCenters" type="checkbox" checked><label for="showCenters">centri O derivati e diametri</label></div>
+    <div class="checkrow"><input id="showTangents" type="checkbox" checked><label for="showTangents">tangente comune in E₀</label></div>
+    <div class="checkrow"><input id="showLabels" type="checkbox" checked><label for="showLabels">etichette</label></div>
+    <div class="row"><label>spessore curva</label><input id="curveWidth" type="range" min="1" max="8" step="0.2" value="2.6"><span id="curveWidthv"></span></div>
+
+    <div class="note">
+      <div class="formula">
+Penna = punto che scorre sulle due circonferenze.
+È lui che ora lascia una traccia nel piano.
+
+Γ continua:
+non si tronca a 720.
+
+Cerchi:
+respirano con la fase locale.
+
+Penna:
+usa la posizione corrente sulla curva
+e lascia memoria nel piano.
+      </div>
+      <div class="small">
+        In pratica: il dot azzurro che vedi sulle circonferenze ora "scrive" davvero nel piano, senza spezzarsi quando la dinamica globale supera 720°.
+      </div>
+    </div>
+  </aside>
+
+  <main id="view" class="panel">
+    <canvas id="cv"></canvas>
+    <div id="hud"></div>
+  </main>
+</div>
+
+<script>
+(()=>{
+'use strict';
+
+const TAU=Math.PI*2, DEG=Math.PI/180;
+const $=id=>document.getElementById(id);
+const cv=$('cv'), ctx=cv.getContext('2d');
+let last=performance.now();
+
+const ids=[
+'zoom','offX','offY','showGrid','E0x','E0y','axisDeg','rMax',
+'globalPhase','localMode','cycleSense','cycleOffset',
+'controlMode','piSigned','p3Signed',
+'rhoP','rhoQ','rhoPlaneScale','rhoDriven','showRhoInset','showRhoPlaneDot','showRhoPlaneTrail',
+'spin1','spin2','autoSpinFromSide',
+'linkWriteToGlobal','phase','animate','speed','drawPartial','showPenDot','showPenTrail','penTrailMax',
+'showCircles','showCenters','showTangents','showLabels','curveWidth'
+];
+
+function num(id){return +$(id).value}
+function chk(id){return !!$(id).checked}
+function clamp(x,a,b){return x<a?a:x>b?b:b}
+function clamp2(x,a,b){return x<a?a:x>b?b:x}
+function add(a,b){return {x:a.x+b.x,y:a.y+b.y}}
+function mul(v,s){return {x:v.x*s,y:v.y*s}}
+function perp(u){return {x:-u.y,y:u.x}}
+function signNZ(x){return x<0?-1:1}
+function gcd(a,b){a=Math.abs(a)|0;b=Math.abs(b)|0;while(b){const t=b;b=a%b;a=t}return a||1}
+function fmt(x,n=2){return Number.isFinite(x)?x.toFixed(n):'—'}
+function mod(x,m){return ((x%m)+m)%m}
+
+const rhoPlaneTrail=[];
+const penTrail=[];
+
+function clearTrail(arr){ arr.length=0; }
+
+$('clearPenTrail').onclick=()=>{ clearTrail(penTrail); draw(); };
+$('clearAllTrails').onclick=()=>{ clearTrail(penTrail); clearTrail(rhoPlaneTrail); draw(); };
+
+function sync(){
+  for(const id of ids){
+    const v=$(id+'v'); if(!v) continue;
+    const el=$(id);
+    if(el.tagName==='SELECT') v.textContent=el.selectedOptions[0].textContent;
+    else if(el.type==='checkbox') v.textContent=el.checked?'on':'off';
+    else {
+      const val=num(id);
+      v.textContent=(Math.abs(val)<10 && !Number.isInteger(val))?val.toFixed(2):String(Math.round(val*100)/100);
+    }
+  }
+  const rMax=num('rMax'), dMax=2*rMax;
+  $('limitsRead').textContent=`rmax = ${fmt(rMax)}     dmax = 2·rmax = ${fmt(dMax)}     dπ²+d3π² = ${fmt(dMax*dMax)}`;
+}
+
+ids.forEach(id=>{
+  const el=$(id);
+  if(el) el.addEventListener('input',()=>{
+    if(['rhoP','rhoQ','rhoPlaneScale','cycleSense','cycleOffset','axisDeg','E0x','E0y','zoom','offX','offY','rMax'].includes(id)){
+      // non cancelliamo automaticamente penna, così vedi la storia
+    }
+    sync();
+    draw();
+  });
+});
+
+function setGlobalFromLocalDeg(deg){
+  $('globalPhase').value=String(Math.max(0,deg));
+  sync(); draw();
+}
+$('pBothRight').onclick=()=>setGlobalFromLocalDeg(0);
+$('pRightLeft').onclick=()=>setGlobalFromLocalDeg(180);
+$('pBothLeft').onclick=()=>setGlobalFromLocalDeg(360);
+$('pLeftRight').onclick=()=>setGlobalFromLocalDeg(540);
+$('pCollapseA2').onclick=()=>setGlobalFromLocalDeg(90);
+$('pCollapseA1').onclick=()=>setGlobalFromLocalDeg(270);
+
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  cv.width=Math.round(cv.clientWidth*dpr);
+  cv.height=Math.round(cv.clientHeight*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+window.addEventListener('resize',resize,{passive:true});
+
+function globalTurns(){ return num('globalPhase')/360; }
+
+function localPhaseDeg(){
+  const gp=num('globalPhase');
+  const mode=$('localMode').value;
+  if(mode==='mod720') return mod(gp,720);
+  if(mode==='mod360') return mod(gp,360);
+  return gp;
+}
+
+function rhoPsiAtTurns(t){
+  const p=num('rhoP'), q=Math.max(1,num('rhoQ'));
+  const sense=+$('cycleSense').value;
+  const psi0=num('cycleOffset')*DEG;
+  return psi0 + sense*TAU*(p/q)*t;
+}
+
+function rhoAtTurns(t){
+  const psi=rhoPsiAtTurns(t);
+  return {rho1:Math.cos(psi),rho2:Math.sin(psi),psi};
+}
+
+function nodeDistances(){
+  const rMax=num('rMax');
+  const dMax=2*rMax;
+  let d1=num('piSigned');
+  let d2=num('p3Signed');
+
+  if(chk('rhoDriven')){
+    const t=globalTurns();
+    const rr=rhoAtTurns(t);
+    d1=dMax*rr.rho1;
+    d2=dMax*rr.rho2;
+  } else if($('controlMode').value==='cycle'){
+    const local=localPhaseDeg();
+    const sense=+$('cycleSense').value;
+    const offset=num('cycleOffset');
+    const psi=(offset + sense*local/2)*DEG;
+    d1=dMax*Math.cos(psi);
+    d2=dMax*Math.sin(psi);
+  }
+
+  return {d1,d2,dMax,rMax};
+}
+
+function state(){
+  const E={x:num('E0x'),y:num('E0y')};
+  const a=num('axisDeg')*DEG;
+  const u={x:Math.cos(a),y:Math.sin(a)};
+  const v=perp(u);
+
+  const nd=nodeDistances();
+  const d1=nd.d1,d2=nd.d2;
+  const eps1=signNZ(d1), eps2=signNZ(d2);
+  const r1=Math.abs(d1)/2, r2=Math.abs(d2)/2;
+
+  const Ppi=add(E,mul(u,d1));
+  const P3pi=add(E,mul(u,d2));
+  const O1=add(E,mul(u,d1/2));
+  const O2=add(E,mul(u,d2/2));
+
+  const s1base=+$('spin1').value;
+  const s2base=+$('spin2').value;
+  const sideSpin=chk('autoSpinFromSide');
+  const s1=sideSpin?s1base*eps1:s1base;
+  const s2=sideSpin?s2base*eps2:s2base;
+
+  const local=localPhaseDeg();
+  const phase=chk('linkWriteToGlobal')?local:num('phase');
+
+  const gt=globalTurns();
+  const rr=rhoAtTurns(gt);
+  const rhoScale=num('rhoPlaneScale');
+  const rhoPlanePoint=add(E, add(mul(u, rr.rho1*nd.dMax*rhoScale), mul(v, rr.rho2*nd.dMax*rhoScale)));
+
+  return {E,u,v,dMax:nd.dMax,rMax:nd.rMax,d1,d2,eps1,eps2,r1,r2,Ppi,P3pi,O1,O2,s1,s2,chi:s1*s2,phase,local,globalDeg:num('globalPhase'),globalTurns:gt,rho:rr,rhoPlanePoint};
+}
+
+function toCanvas(P,S){
+  const cx=cv.clientWidth/2+num('offX'), cy=cv.clientHeight/2+num('offY');
+  return {x:cx+P.x*S,y:cy-P.y*S};
+}
+
+function pointOnCircle(st,which,phi){
+  const d=which===1?st.d1:st.d2;
+  const r=which===1?st.r1:st.r2;
+  const s=which===1?st.s1:st.s2;
+  return add(st.E, add(mul(st.u, (d/2)*(1-Math.cos(phi))), mul(st.v, s*r*Math.sin(phi))));
+}
+
+function pointAtTheta(st,theta){
+  if(theta<=TAU) return pointOnCircle(st,1,theta);
+  return pointOnCircle(st,2,theta-TAU);
+}
+
+function drawSegmentWorld(A,B,S,color,alpha=1,width=1,dash=null){
+  const a=toCanvas(A,S), b=toCanvas(B,S);
+  ctx.save(); ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=width; if(dash)ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.restore();
+}
+function drawCircleWorld(C,r,S,color,alpha=1,width=1,dash=null){
+  if(Math.abs(r)<1e-9)return;
+  const p=toCanvas(C,S);
+  ctx.save(); ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=width; if(dash)ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.arc(p.x,p.y,Math.abs(r)*S,0,TAU); ctx.stroke(); ctx.restore();
+}
+function drawPointWorld(P,S,color,label='',rad=4){
+  const p=toCanvas(P,S);
+  ctx.save(); ctx.fillStyle=color; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,TAU); ctx.fill();
+  if(label && chk('showLabels')){
+    ctx.font='12px ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.fillText(label,p.x+7,p.y-7);
+  }
+  ctx.restore();
+}
+function drawLineThrough(P,dir,S,color,alpha=1,width=1,dash=null){
+  const L=2000;
+  drawSegmentWorld(add(P,mul(dir,-L)),add(P,mul(dir,L)),S,color,alpha,width,dash);
+}
+
+function drawGrid(st,S){
+  if(!chk('showGrid'))return;
+  const W=cv.clientWidth,H=cv.clientHeight;
+  const step=50;
+  const minX=(-W/2-num('offX'))/S, maxX=(W/2-num('offX'))/S;
+  const minY=(-H/2+num('offY'))/S, maxY=(H/2+num('offY'))/S;
+  for(let x=Math.floor(minX/step)*step;x<=maxX;x+=step){
+    drawSegmentWorld({x,y:minY},{x,y:maxY},S,'rgba(255,255,255,.055)',1,1);
+  }
+  for(let y=Math.floor(minY/step)*step;y<=maxY;y+=step){
+    drawSegmentWorld({x:minX,y},{x:maxX,y},S,'rgba(255,255,255,.055)',1,1);
+  }
+  drawLineThrough(st.E,st.u,S,'rgba(255,255,255,.16)',1,1);
+  drawLineThrough(st.E,st.v,S,'rgba(255,255,255,.10)',1,1);
+}
+
+function drawCurve(st,S,partial){
+  const total=4*Math.PI;
+  const maxTheta=partial?clamp2(st.phase*DEG,0,total):total;
+  const N=Math.max(80,Math.round(1080*(maxTheta/total)));
+  ctx.save();
+  ctx.strokeStyle='rgba(95,231,255,.96)';
+  ctx.lineWidth=num('curveWidth');
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const th=maxTheta*i/N;
+    const P=pointAtTheta(st,th);
+    const q=toCanvas(P,S);
+    if(i===0)ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFaintFull(st,S){
+  ctx.save();
+  ctx.strokeStyle='rgba(95,231,255,.20)';
+  ctx.lineWidth=1.2;
+  ctx.beginPath();
+  const N=1080;
+  for(let i=0;i<=N;i++){
+    const th=4*Math.PI*i/N;
+    const P=pointAtTheta(st,th);
+    const q=toCanvas(P,S);
+    if(i===0)ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function phaseName(st){
+  const e1=st.eps1, e2=st.eps2;
+  if(e1>0 && e2>0) return 'destra/destra';
+  if(e1>0 && e2<0) return 'destra/sinistra';
+  if(e1<0 && e2<0) return 'sinistra/sinistra';
+  return 'sinistra/destra';
+}
+
+function collapseName(st){
+  const eps=1e-3;
+  if(st.r1<eps && st.r2<eps) return 'doppio collasso';
+  if(st.r1<eps) return 'collasso A₁: dπ=0';
+  if(st.r2<eps) return 'collasso A₂: d3π=0';
+  return 'nessun collasso';
+}
+
+function updateTrail(arr, ptCanvas, gValue, maxLen){
+  if(arr.length===0){
+    arr.push({x:ptCanvas.x,y:ptCanvas.y,g:gValue});
+    return;
+  }
+  const last=arr[arr.length-1];
+  const dist=Math.hypot(ptCanvas.x-last.x,ptCanvas.y-last.y);
+  if(dist>0.5 || Math.abs(gValue-last.g)>1){
+    arr.push({x:ptCanvas.x,y:ptCanvas.y,g:gValue});
+    while(arr.length>maxLen) arr.shift();
+  }
+}
+
+function drawTrail(arr, color, width=1.5){
+  if(arr.length<2) return;
+  ctx.save();
+  ctx.strokeStyle=color;
+  ctx.lineWidth=width;
+  ctx.beginPath();
+  for(let i=0;i<arr.length;i++){
+    const p=arr[i];
+    if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRhoInset(st){
+  if(!chk('showRhoInset')) return;
+  const W=cv.clientWidth;
+  const box=182, pad=14;
+  const x0=W-box-pad, y0=pad;
+  const cx=x0+box/2, cy=y0+box/2;
+  const R=box*0.38;
+
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,.48)';
+  ctx.strokeStyle='rgba(255,255,255,.10)';
+  ctx.lineWidth=1;
+  if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(x0,y0,box,box,10); ctx.fill(); ctx.stroke(); }
+  else { ctx.fillRect(x0,y0,box,box); ctx.strokeRect(x0,y0,box,box); }
+
+  ctx.strokeStyle='rgba(255,255,255,.18)';
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,TAU); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-R-10,cy); ctx.lineTo(cx+R+10,cy); ctx.moveTo(cx,cy-R-10); ctx.lineTo(cx,cy+R+10); ctx.stroke();
+
+  // full trail up to current global time
+  const turns=st.globalTurns;
+  const N=Math.max(40,Math.min(5000,Math.round(turns*160)));
+  ctx.strokeStyle='rgba(240,233,106,.75)';
+  ctx.lineWidth=1.35;
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const t=turns*i/N;
+    const rr=rhoAtTurns(t);
+    const x=cx+rr.rho1*R, y=cy-rr.rho2*R;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  const gx=st.rho.rho1, gy=st.rho.rho2;
+  ctx.fillStyle='#ffffff';
+  ctx.beginPath(); ctx.arc(cx+gx*R,cy-gy*R,5,0,TAU); ctx.fill();
+
+  ctx.fillStyle='rgba(220,235,255,.92)';
+  ctx.font='11px ui-monospace,Consolas,monospace';
+  ctx.fillText('piano ρ',x0+8,y0+16);
+  ctx.fillText('ρπ',cx+R+13,cy+4);
+  ctx.fillText('ρ3π',cx-12,cy-R-13);
+  ctx.fillText(`${num('rhoP')}/${num('rhoQ')}  | Γ=${Math.round(st.globalDeg)}°`,x0+8,y0+box-10);
+  ctx.restore();
+}
+
+function draw(){
+  sync();
+  const st=state();
+  const S=num('zoom')*2.0;
+  ctx.clearRect(0,0,cv.clientWidth,cv.clientHeight);
+
+  drawGrid(st,S);
+
+  if(chk('showCircles')){
+    drawCircleWorld(st.O1,st.r1,S,'rgba(255,121,189,.72)',0.95,1.5,[5,4]);
+    drawCircleWorld(st.O2,st.r2,S,'rgba(255,177,61,.72)',0.95,1.5,[8,5]);
+  }
+
+  if(chk('drawPartial')) {
+    drawFaintFull(st,S);
+    drawCurve(st,S,true);
+  } else {
+    drawCurve(st,S,false);
+  }
+
+  if(chk('showCenters')){
+    drawSegmentWorld(st.E,st.Ppi,S,'rgba(255,121,189,.55)',1,1.1,[7,5]);
+    drawSegmentWorld(st.E,st.P3pi,S,'rgba(255,177,61,.55)',1,1.1,[7,5]);
+    drawPointWorld(st.O1,S,'#ff79bd','O₁',3.6);
+    drawPointWorld(st.O2,S,'#ffb13d','O₂',3.6);
+  }
+
+  if(chk('showTangents')){
+    drawLineThrough(st.E,st.v,S,'rgba(144,255,178,.42)',1,1.5,[6,5]);
+  }
+
+  const Pnow=pointAtTheta(st,clamp2(st.phase*DEG,0,4*Math.PI));
+  const pCanvas=toCanvas(Pnow,S);
+  updateTrail(penTrail, pCanvas, st.globalDeg, Math.max(20, num('penTrailMax')));
+
+  const rhoCanvas=toCanvas(st.rhoPlanePoint,S);
+  updateTrail(rhoPlaneTrail, rhoCanvas, st.globalDeg, 3000);
+
+  if(chk('showPenTrail')) drawTrail(penTrail, 'rgba(95,231,255,.88)', 1.8);
+  if(chk('showRhoPlaneTrail')) drawTrail(rhoPlaneTrail, 'rgba(240,233,106,.78)', 1.4);
+
+  drawPointWorld(st.E,S,'#ffffff','E₀ = 0 = 2π = 4π',5.2);
+  drawPointWorld(st.Ppi,S,'#ff79bd','π',4.8);
+  drawPointWorld(st.P3pi,S,'#ffb13d','3π',4.8);
+
+  if(chk('showPenDot')) drawPointWorld(Pnow,S,'#5fe7ff','θ / penna',5.2);
+  if(chk('showRhoPlaneDot')) drawPointWorld(st.rhoPlanePoint,S,'#f0e96a','ρ',4.8);
+
+  drawRhoInset(st);
+
+  const area1=Math.PI*st.r1*st.r1;
+  const area2=Math.PI*st.r2*st.r2;
+  const dO=Math.hypot((st.O2.x-st.O1.x),(st.O2.y-st.O1.y));
+  const overlap=st.eps1===st.eps2 && Math.abs(st.r1-st.r2)<0.5;
+  const mode=chk('rhoDriven')?'p/q ρ guida i cerchi':($('controlMode').value==='cycle'?'fase ciclica geometrica':'controllo diretto');
+  const red=gcd(num('rhoP'),num('rhoQ'));
+  $('hud').textContent=
+`Struttura primaria: cerchi A₁/A₂. Penna = dot azzurro che scorre sulle circonferenze.
+Modalità cerchi: ${mode}
+Stato cerchi: ${phaseName(st)}   |   ${collapseName(st)}
+Γ globale=${fmt(st.globalDeg,0)}°   |   turni globali=${fmt(st.globalTurns,3)}   |   fase locale usata=${fmt(st.local,2)}°
+rmax=${fmt(st.rMax)}   dmax=${fmt(st.dMax)}   dπ²+d3π²=${fmt(st.d1*st.d1+st.d2*st.d2)}
+dπ=${fmt(st.d1)}   d3π=${fmt(st.d2)}
+O₁=(E₀+π)/2   r₁=${fmt(st.r1)}   |   O₂=(E₀+3π)/2   r₂=${fmt(st.r2)}
+A₁/A₂ sovrapposti: ${overlap?'SÌ':'NO'}   |O₂-O₁|=${fmt(dO)}
+Area A₁=${fmt(area1)}   Area A₂=${fmt(area2)}   Area totale=${fmt(area1+area2)}
+χ_eff=${st.chi}   mano A₁=${st.s1}   mano A₂=${st.s2}
+
+Tracce:
+penna: ${penTrail.length} punti   |   ρ piano: ${rhoPlaneTrail.length} punti
+ρ: p/q=${num('rhoP')}/${num('rhoQ')} ridotta=${num('rhoP')/red}/${num('rhoQ')/red}
+ρπ=${fmt(st.rho.rho1,4)}   ρ3π=${fmt(st.rho.rho2,4)}
+P penna = (${fmt(Pnow.x,2)}, ${fmt(Pnow.y,2)})   |   P ρ = (${fmt(st.rhoPlanePoint.x,2)}, ${fmt(st.rhoPlanePoint.y,2)})`;
+}
+
+function tick(now){
+  const dt=(now-last)/1000; last=now;
+  if(chk('animate')){
+    const next=num('globalPhase')+num('speed')*dt;
+    $('globalPhase').value=String(Math.round(next));
+    if(chk('linkWriteToGlobal')){
+      const lp=localPhaseDeg();
+      $('phase').value=String(Math.round(clamp2(lp,0,720)));
+    }
+    draw();
+  }
+  requestAnimationFrame(tick);
+}
+
+sync();
+resize();
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
